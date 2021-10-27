@@ -1,2 +1,3 @@
-AUTH_URL = 'https://login.nstu.ru/ssoservice/XUI/#login/&realm=ido&goto=https%3A%2F%2Fdispace.edu.nstu.ru%2Fuser%2Fproceed%3Flogin%3Dopenam%26password%3Dauth'
+TOKEN_URL = 'https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth'
+AUTH_URL = 'https://login.nstu.ru/ssoservice/json/authenticate'
 _XSRF = None
