@@ -1,7 +1,7 @@
 import argparse
 import os, sys
 import requests
-import config
+import urls
 import json
 
 from fake_useragent import UserAgent
@@ -16,10 +16,10 @@ def _parse_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument('-l','--login', 
                         type=str, 
-                        help='Логин или электронная почта - обязательный параметр')
+                        help='Логин или электронная почта. Зашифровано')
     parser.add_argument('-p','--password',
                         type=str,
-                        help='Пароль от личного кабинета, хранится в зашифрованном виде')
+                        help='Пароль от личного кабинета. Зашифровано')
     return parser
 
 
@@ -27,13 +27,14 @@ def init(args: argparse.Namespace) -> bool:
     """
     Инициализация переменных окружения, проверка на наличие аргументов
     """    
+    os.environ['KEY'] = '666'
+
     if args.login and args.password:
-        os.environ['KEY'] = '666'
         os.environ['LOGIN'] = encrypt(args.login, os.getenv('KEY'))
         os.environ['PASSWORD'] = encrypt(args.password, os.getenv('KEY'))
 
         return True
-    
+
     return False
 
 
@@ -44,14 +45,11 @@ def logging(login: str, password: str) -> None:
     agent = UserAgent()
     header = {'User-Agent': str(agent.chrome)}
 
-    with requests.Session() as session:
-        session.get(url=config.AUTH_URL, headers=header)
-
-        config._XSRF = session.cookies.get('_xsrf', domain='.nstu.ru')
-        
-        token = dict(session.post(config.TOKEN_URL).json())['authId']
+    with requests.Session() as session: 
+        _XSRF = session.cookies.get('_xsrf', domain='.nstu.ru')
+        token = dict(session.post(urls.TOKEN).json())['authId']
          
-        response = session.post(config.AUTH_URL, json={
+        response = session.post(urls.AUTH, headers=header, json={
             'authId': token, 
             'template': '',
             'stage': 'JDBCExt1',
@@ -89,8 +87,8 @@ def logging(login: str, password: str) -> None:
             ]
         }
                                 )
-        
-        print(response.json())
+
+        print(response.content)
 
 
 
@@ -98,7 +96,7 @@ if __name__ == "__main__":
     
     parser = _parse_args()
     args = parser.parse_args()
-
+    
     if not init(args=args):
         sys.exit('Небходим запуск с параметрами -l (--login) [электронная почта/логин] -p (--password) [пароль] \
               \nНапример: python main.py -l mail@corp.nstu.ru -p password ')
