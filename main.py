@@ -1,8 +1,9 @@
 import argparse
 import os, sys
+from typing import Any
 import requests
-import urls
 import json
+import getpass
 
 from fake_useragent import UserAgent
 from cryptocode import encrypt, decrypt
@@ -22,18 +23,64 @@ def _parse_args() -> argparse.ArgumentParser:
                         help='Пароль от личного кабинета. Зашифровано')
     return parser
 
+def load_config() -> Any:
+    """
+    Загрузка конфигурационного файла
+    """
+    if not os.path.exists('config.json'):
+        config = {
+            "TOKEN" : "https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
+            "AUTH" : "https://login.nstu.ru/ssoservice/json/authenticate",
+            "LOGIN" : None,
+            "PASSWORD" : None
+        }
+
+        with open('config.json','w') as file:
+            json.dump(config, file)    
+
+    with open('config.json', 'r') as file:
+        return json.load(file)
+
+
+def write_config(conf: dict) -> None:
+    """
+    Запись в конфигурационный файл
+    """
+    with open('config.json', 'w') as file:
+        json.dump(conf, file)
+
 
 def init(args: argparse.Namespace) -> bool:
     """
     Инициализация переменных окружения, проверка на наличие аргументов
     """    
     os.environ['KEY'] = '666'
-
-    if args.login and args.password:
+    config = load_config()
+    
+    if args.login:
         os.environ['LOGIN'] = encrypt(args.login, os.getenv('KEY'))
-        os.environ['PASSWORD'] = encrypt(args.password, os.getenv('KEY'))
+               
+        if args.password:
+            os.environ['PASSWORD'] = encrypt(args.password, os.getenv('KEY'))
+        
+        else:
+            try:
+                os.environ['PASSWORD'] = encrypt(getpass.getpass('Пароль: '), os.getenv('KEY'))
+            except:
+                sys.exit()
+
+        config['LOGIN'] = os.getenv('LOGIN')
+        config['PASSWORD'] = os.getenv('PASSWORD')
+        
+        write_config(conf=dict(config))
 
         return True
+    
+    if config['LOGIN'] and config['PASSWORD']:
+        os.environ['LOGIN'] = config['LOGIN']
+        os.environ['PASSWORD'] = config['PASSWORD']
+        
+        return True        
 
     return False
 
@@ -45,11 +92,13 @@ def logging(login: str, password: str) -> None:
     agent = UserAgent()
     header = {'User-Agent': str(agent.chrome)}
 
+    config = load_config()
+
     with requests.Session() as session: 
         _XSRF = session.cookies.get('_xsrf', domain='.nstu.ru')
-        token = dict(session.post(urls.TOKEN).json())['authId']
+        token = dict(session.post(config['TOKEN']).json())['authId']
          
-        response = session.post(urls.AUTH, headers=header, json={
+        response = session.post(config['AUTH'], headers=header, json={
             'authId': token, 
             'template': '',
             'stage': 'JDBCExt1',
@@ -98,8 +147,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if not init(args=args):
-        sys.exit('Небходим запуск с параметрами -l (--login) [электронная почта/логин] -p (--password) [пароль] \
-              \nНапример: python main.py -l mail@corp.nstu.ru -p password ')
+        sys.exit('Для старта необходимо наличие параметра -l (--login) [электронная почта/логин], либо -l -p (--password) [пароль] \
+              \nНапример: python main.py -l mail@stud.nstu.ru | python main.py -l mail@corp.nstu.ru -p password \
+              \nПоследующий запуск возможен без параметров')
 
     logging(
         str(decrypt(os.getenv('LOGIN'), os.getenv('KEY'))), 
