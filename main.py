@@ -1,10 +1,10 @@
 import argparse
 import os, sys
-from typing import Any
 import requests
 import json
 import getpass
 
+from typing import Any
 from fake_useragent import UserAgent
 from cryptocode import encrypt, decrypt
 from requests.sessions import session
@@ -23,14 +23,15 @@ def _parse_args() -> argparse.ArgumentParser:
                         help='Пароль от личного кабинета. Зашифровано')
     return parser
 
+
 def load_config() -> Any:
     """
     Загрузка конфигурационного файла
     """
     if not os.path.exists('config.json'):
         config = {
-            "TOKEN" : "https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
-            "AUTH" : "https://login.nstu.ru/ssoservice/json/authenticate",
+            "TOKEN_URL" : "https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
+            "AUTH_URL" : "https://login.nstu.ru/ssoservice/json/authenticate",
             "LOGIN" : None,
             "PASSWORD" : None
         }
@@ -72,7 +73,7 @@ def init(args: argparse.Namespace) -> bool:
         config['LOGIN'] = os.getenv('LOGIN')
         config['PASSWORD'] = os.getenv('PASSWORD')
         
-        write_config(conf=dict(config))
+        write_config(conf=config)
 
         return True
     
@@ -96,9 +97,9 @@ def logging(login: str, password: str) -> None:
 
     with requests.Session() as session: 
         _XSRF = session.cookies.get('_xsrf', domain='.nstu.ru')
-        token = dict(session.post(config['TOKEN']).json())['authId']
+        token = dict(session.post(config['TOKEN_URL']).json())['authId']
          
-        response = session.post(config['AUTH'], headers=header, json={
+        response = session.post(config['AUTH_URL'], headers=header, json={
             'authId': token, 
             'template': '',
             'stage': 'JDBCExt1',
