@@ -10,6 +10,7 @@ from cryptocode import encrypt, decrypt
 from requests.sessions import session
 
 
+
 def _parse_args() -> argparse.ArgumentParser:
     """
     Обработка параметров
@@ -32,6 +33,7 @@ def load_config() -> Any:
         config = {
             "TOKEN_URL" : "https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
             "AUTH_URL" : "https://login.nstu.ru/ssoservice/json/authenticate",
+            "CALENDAR_URL" : "https://dispace.edu.nstu.ru/diclass/calendar/index",
             "LOGIN" : None,
             "PASSWORD" : None
         }
@@ -86,20 +88,18 @@ def init(args: argparse.Namespace) -> bool:
     return False
 
 
-def logging(login: str, password: str) -> None:
+def logging(login: str, password: str) -> Any:
     """
     Авторизация на сайте
     """ 
     agent = UserAgent()
+    config = load_config()
+    
     header = {'User-Agent': str(agent.chrome)}
 
-    config = load_config()
-
     with requests.Session() as session: 
-        _XSRF = session.cookies.get('_xsrf', domain='.nstu.ru')
-        token = dict(session.post(config['TOKEN_URL']).json())['authId']
-         
-        response = session.post(config['AUTH_URL'], headers=header, json={
+        token = session.post(url=config['TOKEN_URL']).json()['authId']
+        response = session.post(url=config['AUTH_URL'], headers=header, json={
             'authId': token, 
             'template': '',
             'stage': 'JDBCExt1',
@@ -131,15 +131,31 @@ def logging(login: str, password: str) -> None:
                         {
                             'name': 'IDToken2', 
                             'value': password
-                        }
+                         }
                     ]
                 }
             ]
         }
                                 )
+        
+        if response.ok:
+            sys.stdout.write('Успешная авторизация!\n')
+            return session
+        
+        return None
 
-        print(response.content)
 
+def processing(session: requests.Session) -> None:
+    """
+    Обработка расписания
+    """
+    # https://dispace.edu.nstu.ru/diclass/webinar/index/id_webinar
+    # Возможно стоит забрать session_id, math_hash с CALENDAR_URL
+    config = load_config()
+
+    with session:
+        response = session.get(url=config['CALENDAR_URL'])
+        print(response.content.title())
 
 
 if __name__ == "__main__":
@@ -152,7 +168,9 @@ if __name__ == "__main__":
               \nНапример: python main.py -l mail@stud.nstu.ru | python main.py -l mail@corp.nstu.ru -p password \
               \nПоследующий запуск возможен без параметров')
 
-    logging(
+    session = logging(
         str(decrypt(os.getenv('LOGIN'), os.getenv('KEY'))), 
         str(decrypt(os.getenv('PASSWORD'), os.getenv('KEY')))
     )
+
+    processing(session=session)
