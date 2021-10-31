@@ -4,10 +4,10 @@ import requests
 import json
 import getpass
 
+from random import random
 from typing import Any
-from fake_useragent import UserAgent
 from cryptocode import encrypt, decrypt
-from requests.sessions import session
+from requests.sessions import RequestsCookieJar, session
 
 
 
@@ -31,9 +31,10 @@ def load_config() -> Any:
     """
     if not os.path.exists('config.json'):
         config = {
-            "TOKEN_URL" : "https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
-            "AUTH_URL" : "https://login.nstu.ru/ssoservice/json/authenticate",
-            "CALENDAR_URL" : "https://dispace.edu.nstu.ru/diclass/calendar/index",
+            "AUTH_TOKEN_URL" : "https://login.nstu.ru/ssoservice/json/authenticate?realm=/ido&goto=https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
+            "NSTU_TOKEN_URL" : "https://login.nstu.ru/ssoservice/json/authenticate",
+            "DISPACE_TOKEN_URL" : "https://dispace.edu.nstu.ru/user/proceed?login=openam&password=auth",
+            "CALENDAR_URL" : "https://dispace.edu.nstu.ru/diclass/calendar/",
             "LOGIN" : None,
             "PASSWORD" : None
         }
@@ -88,19 +89,16 @@ def init(args: argparse.Namespace) -> bool:
     return False
 
 
-def logging(login: str, password: str) -> Any:
+def authenticate(login: str, password: str) -> Any:
     """
     Авторизация на сайте
     """ 
-    agent = UserAgent()
     config = load_config()
-    
-    header = {'User-Agent': str(agent.chrome)}
 
-    with requests.Session() as session: 
-        token = session.post(url=config['TOKEN_URL']).json()['authId']
-        response = session.post(url=config['AUTH_URL'], headers=header, json={
-            'authId': token, 
+    with requests.Session() as session:
+        auth_token = session.post(url=config['AUTH_TOKEN_URL']).json()['authId'] # Получаем токен для авторизации
+        json = {
+            'authId': auth_token, 
             'template': '',
             'stage': 'JDBCExt1',
             'header': 'Авторизация',
@@ -136,8 +134,14 @@ def logging(login: str, password: str) -> Any:
                 }
             ]
         }
-                                )
-        
+        auth = session.post(url=config['NSTU_TOKEN_URL'], json=json)
+
+        if not auth.ok:
+            sys.exit('Неудачная аутентификация!')
+
+        session.cookies.set(name='NstuSsoToken', value=auth.json()['tokenId']) # Если данные верны и аутентификация успешна - устанавливаем токен платформы в куки
+        response = session.post(url=config['DISPACE_TOKEN_URL']) # В заголовке ответа получаем Set-Cookie (dispace токен)
+
         if response.ok:
             sys.stdout.write('Успешная авторизация!\n')
             return session
@@ -152,10 +156,9 @@ def processing(session: requests.Session) -> None:
     # https://dispace.edu.nstu.ru/diclass/webinar/index/id_webinar
     # Возможно стоит забрать session_id, math_hash с CALENDAR_URL
     config = load_config()
-
+    
     with session:
         response = session.get(url=config['CALENDAR_URL'])
-        print(response.content.title())
 
 
 if __name__ == "__main__":
@@ -168,9 +171,10 @@ if __name__ == "__main__":
               \nНапример: python main.py -l mail@stud.nstu.ru | python main.py -l mail@corp.nstu.ru -p password \
               \nПоследующий запуск возможен без параметров')
 
-    session = logging(
+    session = authenticate(
         str(decrypt(os.getenv('LOGIN'), os.getenv('KEY'))), 
         str(decrypt(os.getenv('PASSWORD'), os.getenv('KEY')))
     )
 
-    processing(session=session)
+    if session:
+        processing(session=session)
