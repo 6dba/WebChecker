@@ -161,9 +161,6 @@ def processing(session: requests.Session) -> Any:
     # https://dispace.edu.nstu.ru/diclass/webinar/index/id_webinar
     # Возможно стоит забрать session_id, math_hash с CALENDAR_URL
     config = load_config()
-   
-    if not session:
-        return None
 
     with session:
         response = session.post(url=config['CALENDAR_URL'], data={
@@ -190,7 +187,7 @@ def parse_schedule(events: list) -> Any:
     Разбор возвращенного списка, извлечение мероприятия, если оно is_available
     """
     if not events:
-        sys.stdout.write('Отсутствуют список мероприятий\n')
+        sys.stdout.write('Отсутствуeт список мероприятий\n')
         return None
 
     for event in events:
@@ -209,9 +206,14 @@ def parse_schedule(events: list) -> Any:
 def connecting(event: dict, session: requests.Session):
     """
     Подключение к вебинару
-    """
-    if not event:
+    """ 
+    try:
+        event['is_available']
+    except TypeError:
         sys.stdout.write('Передано пустое мероприятие\n')
+        return None
+    except KeyError:
+        sys.stdout.write('Отсутствуeт атрибут проверки\n')
         return None
 
     if event['is_available'] and session:
