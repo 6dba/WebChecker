@@ -138,22 +138,25 @@ def authentification(login: str, password: str) -> Any:
         auth = session.post(url=config['NSTU_TOKEN_URL'], json=json)
 
         if not auth.ok:
-            sys.stdout.write('Неудачная аутентификация!\n')
-            sys.exit(f'Код: {auth}\nОтвет от сервера: {auth.text}\n')
+            sys.stdout.write(f'Неудачная аутентификация!\nКод: {auth}\nОтвет от сервера: {auth.text}\n')
+            return None
 
-        session.cookies.set(name='NstuSsoToken', value=auth.json()['tokenId']) # Если данные верны и аутентификация успешна - устанавливаем токен платформы в куки
-        response = session.post(url=config['DISPACE_TOKEN_URL']) # В заголовке ответа получаем Set-Cookie (dispace токен)
+        session.cookies.set(name='NstuSsoToken', value=auth.json()['tokenId']) # Если данные верны и аутентификация успешна - устанавливаем токен платформы в куки 
+        dispace = session.post(url=config['DISPACE_TOKEN_URL']) # В заголовке ответа получаем Set-Cookie (dispace токен)
 
-        if response.ok:
-            sys.stdout.write('Успешная авторизация!\n')
-            return session
-        
-        return None
+        if not dispace.ok:
+            sys.stdout.write('Неудачный запрос на получение токена dispace\nКод: {auth}\nОтвет от сервера: {auth.text}\n') 
+            return None
+    
+        sys.stdout.write('Успешная авторизация!\n')
+        return session
 
 
 def processing(session: requests.Session) -> Any:
     """
     Обработка мероприятий расписания
+    
+    Возращается events, session
     """
     # https://dispace.edu.nstu.ru/diclass/webinar/index/id_webinar
     # Возможно стоит забрать session_id, math_hash с CALENDAR_URL
@@ -172,27 +175,34 @@ def processing(session: requests.Session) -> Any:
             try:
                 response.json()
             except JSONDecodeError:
-                sys.stdout.write('Неудачное получение списка мероприятий\n')
-                sys.exit(f'Код: {response}\nОтвет от сервера: {response.text}\n')
-                
+                sys.stdout.write(f'Неудачное получение списка мероприятий\nКод: {response}\nОтвет от сервера: {response.text}\n')
+                return None, session
 
             sys.stdout.write('Успешно получен список мероприятий!\n')
             return response.json()['events'], session
         
-        sys.stdout.write('Неудачный запрос на получение списка мероприятий\n')
-        sys.exit(f'Код: {response}\nОтвет от сервера: {response.text}\n')
-        
-    
+        sys.stdout.write(f'Неудачный запрос на получение списка мероприятий\nКод: {response}\nОтвет от сервера: {response.text}\n')
+        return None, session 
+
+
 def parse_schedule(events: list) -> Any:
     """
     Разбор возвращенного списка, извлечение мероприятия, если оно is_available
     """
+    if not events:
+        sys.stdout.write('Отсутствуют список мероприятий\n')
+        return None
+
     for event in events:
         event = dict(event)
-        
-        if event['is_available']:
-            return event
     
+        try:
+            if event['is_available']:
+                return event
+        except KeyError:
+            break
+
+    sys.stdout.write('Отсутствуют доступные к просмотру вебинары\n')
     return None
 
 
@@ -200,10 +210,15 @@ def connecting(event: dict, session: requests.Session):
     """
     Подключение к вебинару
     """
-    if event['is_available'] and session:
-        with session.get(url=event['join_link'], allow_redirects=True, stream=True) as response:
-            pass
+    if not event:
+        sys.stdout.write('Передано пустое мероприятие\n')
+        return None
 
+    if event['is_available'] and session:
+        with session.get(url=event['join_link'], allow_redirects=True) as response: # Происходит 3 перенаправления, в итоге получаем ссылку непосредственно на трансляцию
+            # Переход на wss
+            pass
+         
 
 
 if __name__ == "__main__":
@@ -212,7 +227,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if not init(args=args):
-        sys.exit('Для старта необходимо наличие параметра -l (--login) [электронная почта/логин], либо -l -p (--password) [пароль] \
+        sys.exit('Для начала работы необходимо наличие параметра -l (--login) [электронная почта/логин], либо -l -p (--password) [пароль] \
               \nНапример: python main.py -l mail@stud.nstu.ru | python main.py -l mail@stud.nstu.ru -p password \
               \nПоследующий запуск возможен без параметров')
 
@@ -222,5 +237,7 @@ if __name__ == "__main__":
     )
 
     if session:
-        events, session = processing(session=session)
+        events, session = processing(session=session) 
         connecting(event=parse_schedule(events=events), session=session)
+
+    sys.exit('Завершение работы\n')
