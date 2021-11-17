@@ -3,6 +3,7 @@ import os, sys
 import requests
 import json
 import getpass
+import websocket
 
 from json.decoder import JSONDecodeError
 from random import random
@@ -59,7 +60,7 @@ def init(args: argparse.Namespace) -> bool:
     """
     Инициализация переменных окружения, проверка на наличие аргументов
     """    
-    os.environ['KEY'] = '666'
+    os.environ['KEY'] = sys.platform
     config = load_config()
     
     if args.login:
@@ -206,7 +207,10 @@ def parse_schedule(events: list) -> Any:
 def connecting(event: dict, session: requests.Session):
     """
     Подключение к вебинару
-    """ 
+    """
+    if not event:
+        return None
+
     try:
         event['is_available']
     except TypeError:
@@ -219,6 +223,8 @@ def connecting(event: dict, session: requests.Session):
     if event['is_available'] and session:
         with session.get(url=event['join_link'], allow_redirects=True) as response: # Происходит 3 перенаправления, в итоге получаем ссылку непосредственно на трансляцию
             # Переход на wss
+            # https://stackoverflow.com/questions/58866803/create-websocket-connection-from-requests-session-in-python
+            print(response.cookies)
             pass
          
 
