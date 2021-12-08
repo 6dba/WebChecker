@@ -12,7 +12,6 @@ from cryptocode import encrypt, decrypt
 from requests.sessions import RequestsCookieJar, session
 
 
-
 def init_parser() -> argparse.ArgumentParser:
     """
     Обработка параметров
@@ -204,7 +203,7 @@ def parse_schedule(events: list) -> Any:
     return None
 
 
-def connecting(event: dict, session: requests.Session):
+def connecting(event: dict, session: requests.Session) -> Any:
     """
     Подключение к вебинару
     """
@@ -219,13 +218,21 @@ def connecting(event: dict, session: requests.Session):
     except KeyError:
         sys.stdout.write('Отсутствуeт атрибут проверки\n')
         return None
-
+        
     if event['is_available'] and session:
-        with session.get(url=event['join_link'], allow_redirects=True) as response: # Происходит 3 перенаправления, в итоге получаем ссылку непосредственно на трансляцию
-            # Переход на wss
-            # https://stackoverflow.com/questions/58866803/create-websocket-connection-from-requests-session-in-python
-            print(response.cookies)
-            pass
+        redirects = session.get(url=event['join_link'])
+        # Происходит 2 перенаправления, в итоге получаем http ссылку непосредственно на трансляцию
+        
+        redirected_link = redirects.history[-1].headers['location'] # перенаправленная ссылка на трансялцию
+        response = session.get(url=redirected_link, allow_redirects=True) # получаем всякие токены
+        wss_link = session.get(url='https://bbb05.cloud.nstu.ru/html5client/09a04b153fe02f52447c305dfa860c46f8013a26.js?meteor_js_resource=false') # .js возвращает ссылку wss, попробовать ее выкурить
+        print(wss_link.headers)
+        # Переход на wss
+        # https://stackoverflow.com/questions/58866803/create-websocket-connection-from-requests-session-in-python
+        cookies = session.cookies.get_dict()
+        ws = websocket.WebSocketApp(url=redirected_link, 
+                                    header=session.headers, 
+                                    cookie="; ".join(["%s=%s" %(i, j) for i, j in cookies.items()]))            
          
 
 
